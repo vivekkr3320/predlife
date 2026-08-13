@@ -1,0 +1,92 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Payment {
+  id                    String   @id @default(uuid())
+  assessment_session_id String
+  razorpay_order_id     String   @unique
+  razorpay_payment_id   String?
+  amount                Int      @default(19900) // in paise (₹199)
+  currency              String   @default("INR")
+  status                String   @default("pending") // pending, paid, failed, refunded
+  signature_verified    Boolean  @default(false)
+  methodology_version   String   @default("PL-1.0")
+  created_at            DateTime @default(now())
+  paid_at               DateTime?
+  refund_status         String   @default("none")
+}
+
+model AssessmentSession {
+  id                  String   @id // e.g. PL-8f4c9a12
+  payment_id          String?
+  consent_version     String   @default("DPDP-2025-V1")
+  methodology_version String   @default("PL-1.0")
+  status              String   @default("created") // created, paid, active, completed
+  
+  // Answers stored as structured fields & JSON backup
+  age                 String?
+  nicotine_exposure   String?
+  physical_activity   String?
+  diet_quality        String?
+  sleep_duration      String?
+  height_cm           Float?
+  weight_kg           Float?
+  bmi                 Float?
+  systolic_bp         Int?
+  diastolic_bp        Int?
+  bp_status           String?
+  lipids_status       String?
+  glucose_status      String?
+  alcohol_exposure    String?
+  
+  raw_answers_json    String?
+
+  created_at          DateTime @default(now())
+  completed_at        DateTime?
+}
+
+model Report {
+  id                    String   @id @default(uuid())
+  assessment_session_id String   @unique
+  report_token          String   @unique
+  score                 Int
+  risk_band             String
+  min_age               Int
+  max_age               Int
+  strengths_json        String
+  priority_factors_json String
+  plan_json             String
+  methodology_version   String   @default("PL-1.0")
+  emailed_to            String?
+  created_at            DateTime @default(now())
+}
+
+model MethodologyVersion {
+  version      String   @id // PL-1.0
+  name         String
+  description  String
+  released_at  DateTime @default(now())
+}
+
+model EvidenceSource {
+  id               String   @id @default(uuid())
+  variable         String   @unique
+  source_name      String
+  source_url       String
+  citation_date    String
+  evidence_summary String
+}
+
+model AdminLog {
+  id         String   @id @default(uuid())
+  event_type String
+  message    String
+  metadata   String?
+  created_at DateTime @default(now())
+}
