@@ -49,29 +49,59 @@ export default function CheckoutPage() {
         const options = {
           key: keyId,
           amount: amount,
-          currency: currency,
+          currency: currency || 'INR',
           name: 'PredLife Health',
           description: 'Longevity Risk Assessment — ₹199',
           order_id: orderId,
           handler: async function (response: any) {
-            await verifyPayment(response.razorpay_order_id, response.razorpay_payment_id, response.razorpay_signature, sessionId);
+            if (!response?.razorpay_payment_id || !response?.razorpay_signature) {
+              setError('Incomplete payment response received from gateway.');
+              setLoading(false);
+              return;
+            }
+            setLoading(true);
+            await verifyPayment(
+              response.razorpay_order_id || orderId,
+              response.razorpay_payment_id,
+              response.razorpay_signature,
+              sessionId
+            );
+          },
+          prefill: {
+            name: '',
+            email: '',
+            contact: ''
+          },
+          notes: {
+            sessionId: sessionId
+          },
+          modal: {
+            ondismiss: function () {
+              setLoading(false);
+            },
+            escape: true,
+            backdropclose: false
           },
           theme: {
             color: '#0F382C'
           }
         };
+
         const rzp = new window.Razorpay(options);
+        rzp.on('payment.failed', function (response: any) {
+          const desc = response?.error?.description || response?.error?.reason || 'Payment was unsuccessful or cancelled. Please try again.';
+          setError(desc);
+          setLoading(false);
+        });
         rzp.open();
-        setLoading(false);
       } else {
-        // Run Seamless Test Mode Simulator
+        // Run Seamless Test Mode Simulator when no real Razorpay key is configured
         setTimeout(async () => {
           await verifyPayment(orderId, `pay_sim_${Date.now()}`, 'test_mode_valid_signature', sessionId);
-        }, 1200);
+        }, 1000);
       }
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Payment initiation failed. Please try again.');
+      setError(err?.message || 'Payment initiation failed. Please try again.');
       setLoading(false);
     }
   };
@@ -101,8 +131,7 @@ export default function CheckoutPage() {
 
       router.push('/assessment/questionnaire');
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Payment verification failed');
+      setError(err?.message || 'Payment verification failed');
       setLoading(false);
     }
   };
@@ -148,20 +177,54 @@ export default function CheckoutPage() {
         </div>
 
         {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs rounded-sm flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
+          <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs rounded-sm space-y-1">
+            <div className="flex items-center gap-2 font-medium">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+            {error.toLowerCase().includes('expired') && (
+              <p className="text-[11px] text-red-600 dark:text-red-400 pl-6">
+                Tip: Generate a fresh Key ID & Secret from your Razorpay Dashboard &gt; Settings &gt; API Keys and paste them into <code className="bg-red-100 dark:bg-red-900/40 px-1 py-0.5 rounded">.env.local</code>.
+              </p>
+            )}
           </div>
         )}
 
-        <button
-          onClick={handleInitiatePayment}
-          disabled={loading}
-          className="btn-editorial w-full py-4 text-base shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          <CreditCard className="w-5 h-5" />
-          <span>{loading ? 'Processing Razorpay Payment...' : 'Pay ₹199 — Start Assessment'}</span>
-        </button>
+        <div className="space-y-3">
+          <button
+            onClick={handleInitiatePayment}
+            disabled={loading}
+            className="btn-editorial w-full py-4 text-base shadow-md disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <CreditCard className="w-5 h-5" />
+            <span>{loading ? 'Processing Razorpay Payment...' : 'Pay ₹199 — Start Assessment'}</span>
+          </button>
+
+          {/* Test Mode Simulator for local developer testing */}
+          <button
+            type="button"
+            onClick={async () => {
+              setLoading(true);
+              setError('');
+              try {
+                const res = await fetch('/api/payment/create-order', { method: 'POST' });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error);
+                if (typeof window !== 'undefined') {
+                  sessionStorage.setItem('predlife_session_id', data.sessionId);
+                }
+                await verifyPayment(data.orderId, `pay_sim_${Date.now()}`, 'test_mode_valid_signature', data.sessionId);
+              } catch (err: any) {
+                setError(err?.message || 'Simulator failed');
+                setLoading(false);
+              }
+            }}
+            disabled={loading}
+            className="w-full py-2.5 text-xs font-semibold text-[var(--accent-primary)] hover:bg-[var(--accent-subtle)] border border-dashed border-[var(--border-color)] rounded-sm transition-colors cursor-pointer"
+          >
+            🛠️ Test Mode: Complete Checkout Simulation (Bypass Gateway)
+          </button>
+        </div>
 
         <div className="pt-2 text-center space-y-2">
           <div className="flex items-center justify-center gap-2 text-xs text-[var(--text-muted)]">

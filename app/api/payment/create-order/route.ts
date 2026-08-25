@@ -2,11 +2,15 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '@/lib/db';
 import { createServerRazorpayOrder } from '@/lib/razorpay';
+import { logEvent } from '@/lib/logger';
 
 export async function POST() {
   try {
     const sessionId = `PL-${crypto.randomBytes(6).toString('hex')}`;
-    const order = createServerRazorpayOrder(19900); // ₹199 in paise
+    const order = await createServerRazorpayOrder(19900, {
+      sessionId,
+      product: 'PredLife Longevity Assessment (PL-1.0)'
+    });
 
     // Save payment & session record
     await db.payment.create({
@@ -28,13 +32,19 @@ export async function POST() {
       }
     });
 
+    await logEvent('payment_created', `Created Razorpay order ${order.id} for session ${sessionId}`, {
+      orderId: order.id,
+      sessionId,
+      amount: order.amount
+    });
+
     return NextResponse.json({
       success: true,
       sessionId,
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
-      keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_predlife_key'
+      keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || 'rzp_test_predlife_key'
     });
   } catch (error) {
     console.error('Error creating order:', error);

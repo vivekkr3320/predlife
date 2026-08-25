@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '@/lib/db';
 import { verifyRazorpaySignature } from '@/lib/razorpay';
+import { logEvent } from '@/lib/logger';
 
 export async function POST(req: Request) {
   try {
@@ -19,16 +20,22 @@ export async function POST(req: Request) {
     );
 
     if (!isValid) {
+      await logEvent('payment_failed', `Invalid payment signature for order ${razorpay_order_id}`, {
+        orderId: razorpay_order_id,
+        sessionId,
+        paymentId: razorpay_payment_id
+      });
       return NextResponse.json({ success: false, error: 'Invalid payment signature' }, { status: 400 });
     }
 
     // Update payment record
+    const paymentId = razorpay_payment_id || `pay_${crypto.randomBytes(8).toString('hex')}`;
     await db.payment.updateMany({
       where: { razorpay_order_id },
       data: {
         status: 'paid',
         signature_verified: true,
-        razorpay_payment_id: razorpay_payment_id || `pay_${crypto.randomBytes(8).toString('hex')}`,
+        razorpay_payment_id: paymentId,
         paid_at: new Date()
       }
     });
@@ -39,6 +46,12 @@ export async function POST(req: Request) {
       data: {
         status: 'paid'
       }
+    });
+
+    await logEvent('payment_verified', `Payment verified for order ${razorpay_order_id}, session ${sessionId}`, {
+      orderId: razorpay_order_id,
+      paymentId,
+      sessionId
     });
 
     // Generate secure session token
