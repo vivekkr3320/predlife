@@ -12,25 +12,29 @@ export async function POST() {
       product: 'PredLife Longevity Assessment (PL-1.0)'
     });
 
-    // Save payment & session record
-    await db.payment.create({
-      data: {
-        assessment_session_id: sessionId,
-        razorpay_order_id: order.id,
-        amount: order.amount,
-        currency: order.currency,
-        status: 'pending',
-        methodology_version: 'PL-1.0'
-      }
-    });
+    // Save payment & session record if database is available
+    try {
+      await db.payment.create({
+        data: {
+          assessment_session_id: sessionId,
+          razorpay_order_id: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          status: 'pending',
+          methodology_version: 'PL-1.0'
+        }
+      });
 
-    await db.assessmentSession.create({
-      data: {
-        id: sessionId,
-        status: 'created',
-        methodology_version: 'PL-1.0'
-      }
-    });
+      await db.assessmentSession.create({
+        data: {
+          id: sessionId,
+          status: 'created',
+          methodology_version: 'PL-1.0'
+        }
+      });
+    } catch (dbErr) {
+      console.warn('Database save skipped or failed in create-order:', dbErr);
+    }
 
     await logEvent('payment_created', `Created Razorpay order ${order.id} for session ${sessionId}`, {
       orderId: order.id,

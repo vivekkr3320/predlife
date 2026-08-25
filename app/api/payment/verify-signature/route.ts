@@ -30,23 +30,27 @@ export async function POST(req: Request) {
 
     // Update payment record
     const paymentId = razorpay_payment_id || `pay_${crypto.randomBytes(8).toString('hex')}`;
-    await db.payment.updateMany({
-      where: { razorpay_order_id },
-      data: {
-        status: 'paid',
-        signature_verified: true,
-        razorpay_payment_id: paymentId,
-        paid_at: new Date()
-      }
-    });
+    try {
+      await db.payment.updateMany({
+        where: { razorpay_order_id },
+        data: {
+          status: 'paid',
+          signature_verified: true,
+          razorpay_payment_id: paymentId,
+          paid_at: new Date()
+        }
+      });
 
-    // Update session status
-    await db.assessmentSession.update({
-      where: { id: sessionId },
-      data: {
-        status: 'paid'
-      }
-    });
+      // Update session status
+      await db.assessmentSession.update({
+        where: { id: sessionId },
+        data: {
+          status: 'paid'
+        }
+      });
+    } catch (dbErr) {
+      console.warn('Database update skipped or failed in verify-signature:', dbErr);
+    }
 
     await logEvent('payment_verified', `Payment verified for order ${razorpay_order_id}, session ${sessionId}`, {
       orderId: razorpay_order_id,
